@@ -75,7 +75,7 @@ def get_users_in_meetup(meetup_id):
     conn = sqlite3.connect(file_path)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT user_id FROM users WHERE id IN (SELECT user_id FROM meetup_joins WHERE meetup_id = ?)
+        SELECT user_id FROM meetup_joins WHERE meetup_id = ?
     ''', (meetup_id,))
     users = cursor.fetchall()
     conn.close()

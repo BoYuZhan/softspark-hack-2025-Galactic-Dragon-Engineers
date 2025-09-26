@@ -29,12 +29,20 @@ class SignupRequest(BaseModel):
     bio: str
     email: str
     phone: str
+    location: str
 
 class LocationData(BaseModel):
     latitude: float
     longitude: float
     timestamp: Optional[str] = None
     description: Optional[str] = None
+
+class LocationUpdateRequest(BaseModel):
+    latitude: float
+    longitude: float
+    timestamp: Optional[str] = None
+    description: Optional[str] = None
+    user_id: int
 
 class ShareLocationRequest(BaseModel):
     latitude: float
@@ -93,36 +101,122 @@ class UserIdModel(BaseModel):
 async def login(data: LoginRequest):
     user = get_user(data.username)
     if user and user[2] == data.password:
-        return {"username": user[1], "success": True, "token": "abc123xyz", "user_id": user[0]}
+        user_id = user[0]
+        # Add user to online_users table if not already there
+        add_online_user(user_id, "Unknown", 0.0, 0.0)
+        return {"username": user[1], "success": True, "token": "abc123xyz", "user_id": user_id}
     else:
         return {"success": False, "message": "Invalid credentials"}
 
+@app.post("/api/logout")
+async def logout(user_data: UserIdModel):
+    """Logout user and remove from online_users table"""
+    try:
+        success = remove_online_user(user_data.id)
+        if success:
+            return {"success": True, "message": "Logged out successfully"}
+        else:
+            return {"success": False, "message": "Failed to logout"}
+    except Exception as e:
+        print(f"Error during logout: {e}")
+        return {"success": False, "message": f"Logout error: {str(e)}"}
+
 @app.post("/api/signup")
 async def signup(data: SignupRequest):
-    """Basic signup function that prints user details and returns success"""
-    
-    add_user(data.username, data.password, data.firstName, data.lastName, data.email, data.phone, data.bio, data.location)
-    return {"message": "Hello from FastAPI!"}
+    """Signup function that creates a new user account"""
+    try:
+        # Check if username already exists
+        if user_exists(data.username):
+            return {
+                "success": False,
+                "message": "Username already exists. Please choose a different username."
+            }
+        
+        # Add user to database
+        user_id = add_user(
+            data.username, 
+            data.password, 
+            data.firstName, 
+            data.lastName, 
+            data.email, 
+            data.phone, 
+            data.bio, 
+            data.location
+        )
+        
+        if user_id:
+            return {
+                "success": True,
+                "message": "Account created successfully!",
+                "user_id": user_id,
+                "username": data.username
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to create account. Please try again."
+            }
+            
+    except Exception as e:
+        print(f"Error during signup: {e}")
+        return {
+            "success": False,
+            "message": f"Signup error: {str(e)}"
+        }
 
 @app.post("/api/location/update")
-async def update_location(location: LocationData, username: str = "testuser"):
-    """Update user's current location"""
-    location_id = str(uuid.uuid4())
-    timestamp = datetime.now().isoformat()
-    
-    user_locations[username] = {
-        "id": location_id,
-        "latitude": location.latitude,
-        "longitude": location.longitude,
-        "timestamp": timestamp,
-        "description": location.description or "Current location"
-    }
-    
-    return {
-        "success": True,
-        "location_id": location_id,
-        "message": "Location updated successfully"
-    }
+async def update_location(location_data: LocationUpdateRequest):
+    """Update user's current location in both user_locations and online_users tables"""
+    try:
+        location_id = str(uuid.uuid4())
+        timestamp = datetime.now().isoformat()
+        
+        # Get username from user_id for backward compatibility with user_locations
+        user = get_user_by_id(location_data.user_id)
+        if not user:
+            return {
+                "success": False,
+                "message": "User not found"
+            }
+        
+        username = user[1]  # username is at index 1
+        
+        # Update user_locations dictionary (for backward compatibility)
+        user_locations[username] = {
+            "id": location_id,
+            "latitude": location_data.latitude,
+            "longitude": location_data.longitude,
+            "timestamp": timestamp,
+            "description": location_data.description or "Current location"
+        }
+        
+        # Update online_users table with new location
+        success = add_online_user(
+            location_data.user_id, 
+            location_data.description or "Current location",
+            location_data.latitude, 
+            location_data.longitude
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "location_id": location_id,
+                "message": f"Location updated for {username}",
+                "user_id": location_data.user_id
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to update location in database"
+            }
+            
+    except Exception as e:
+        print(f"Error updating location: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to update location: {str(e)}"
+        }
 
 @app.get("/api/location/current")
 async def get_current_location(username: str = "testuser"):
@@ -344,6 +438,33 @@ async def update_user_group_event_endpoint(event_data: UpdateEventRequest):
         return {
             "success": False,
             "message": f"Failed to update event: {str(e)}"
+        }
+
+@app.delete("/api/user_group_events/{event_id}")
+async def delete_user_group_event_endpoint(event_id: int):
+    """Delete a user group event"""
+    try:
+        # First check if the event exists
+        event = get_event_by_id(event_id)
+        if not event:
+            return {
+                "success": False,
+                "message": "Event not found"
+            }
+        
+        # Delete the event (this also deletes participants due to CASCADE)
+        delete_user_group_event(event_id)
+        
+        return {
+            "success": True,
+            "message": "Event deleted successfully",
+            "event_id": event_id
+        }
+    except Exception as e:
+        print(f"Error deleting event: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to delete event: {str(e)}"
         }
 
 @app.get("/api/user_group_events/{event_id}")
@@ -852,6 +973,59 @@ async def get_all_meetups():
             "message": f"Failed to fetch meetups: {str(e)}",
             "meetups": [],
             "count": 0
+        }
+
+@app.get("/api/meetup/{meetup_id}/details")
+async def get_meetup_details(meetup_id: int):
+    """Get detailed meetup information including participants"""
+    try:
+        # Get meetup details
+        meetup = get_meetup_by_id(meetup_id)
+        if not meetup:
+            return {
+                "success": False,
+                "message": "Meetup not found"
+            }
+        
+        # Get host username
+        host_user = get_user_by_id(meetup[6])  # meetup[6] is the host user_id
+        host_username = host_user[1] if host_user else "Unknown"
+        
+        # Get participants
+        participants = get_users_in_meetup(meetup_id)
+        participant_details = []
+        
+        for participant in participants:
+            user = get_user_by_id(participant[0])  # participant[0] is user_id
+            if user:
+                participant_details.append({
+                    "user_id": participant[0],
+                    "username": user[1],
+                    "first_name": user[3],
+                    "last_name": user[4]
+                })
+        
+        return {
+            "success": True,
+            "meetup": {
+                "id": meetup[0],
+                "location": meetup[1],
+                "activities": meetup[2],
+                "meters": meetup[3],
+                "latitude": meetup[4],
+                "longitude": meetup[5],
+                "host": meetup[6],
+                "host_username": host_username
+            },
+            "participants": participant_details,
+            "participant_count": len(participant_details)
+        }
+        
+    except Exception as e:
+        print(f"Error getting meetup details: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to get meetup details: {str(e)}"
         }
 
 class JoinMeetupModel(BaseModel):
