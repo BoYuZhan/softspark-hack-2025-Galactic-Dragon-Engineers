@@ -74,19 +74,18 @@ def generate_event_invitations(event_file, users_file, friends_file, max_distanc
                     "distance_km": round(distance, 2)
                 })
 
+    # Print invitation lists
+    for event in events:
+        print(f"Event: {event['title']} (Host: {event['host']})")
+        if event["invited"]:
+            print("Invited Friends:")
+            for invitee in event["invited"]:
+                print(f"  - {invitee['first_name']} {invitee['last_name']} ({invitee['distance_km']} km away)")
+        else:
+            print("No friends within range.")
+        print("-" * 50)
+
     return events
 
-# Example usage
+
 events_with_invitations = generate_event_invitations("event.txt", "names_and_passwords.txt", "friends.txt")
-
-# Print results
-for event in events_with_invitations:
-    print(f"Event: {event['title']} (Host: {event['host']})")
-    if event["invited"]:
-        print("Invited Friends:")
-        for invitee in event["invited"]:
-            print(f"  - {invitee['first_name']} {invitee['last_name']} ({invitee['distance_km']} km away)")
-    else:
-        print("No friends within range.")
-    print("-" * 50)
-
