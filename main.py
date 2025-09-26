@@ -316,6 +316,7 @@ async def list_whats_on():
         "count": len(events)
     }
 
+
 @app.post("/api/user_group_events/create")
 async def create_user_group_event_endpoint(event_data: UserGroupEventRequest):
     """Create a new user group event"""
