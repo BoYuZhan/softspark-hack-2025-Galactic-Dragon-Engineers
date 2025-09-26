@@ -16,6 +16,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  Platform,
 } from 'react-native';
 import {
   SafeAreaProvider,
@@ -114,6 +115,8 @@ function AppContent() {
     lon: 0,
     selectedFriends: [] as Friend[],
   });
+  const [eventDate, setEventDate] = useState('');
+  const [eventTime, setEventTime] = useState('');
   const [friendsTab, setFriendsTab] = useState<'friends' | 'requests' | 'send'>('friends');
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
@@ -446,6 +449,95 @@ function AppContent() {
     }
   };
 
+  // Delete event
+  const deleteEvent = async (eventId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/user_group_events/${eventId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        Alert.alert('Success', 'Event deleted successfully!');
+        fetchHostingEvents(); // Refresh hosting events
+      } else {
+        Alert.alert('Error', data.message || 'Failed to delete event');
+      }
+    } catch (error) {
+      console.error('Error deleting event:', error);
+      Alert.alert('Error', 'Failed to delete event');
+    }
+  };
+
+  // Handle delete event with confirmation
+  const handleDeleteEvent = (eventId: number, eventTitle: string) => {
+    Alert.alert(
+      'Delete Event',
+      `Are you sure you want to delete "${eventTitle}"? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteEvent(eventId),
+        },
+      ]
+    );
+  };
+
+  // Date and time input handlers
+  const handleDateChange = (text: string) => {
+    // Remove any non-numeric characters except slashes
+    let cleaned = text.replace(/[^\d/]/g, '');
+    
+    // Auto-format as user types (xx/xx/xxxx)
+    if (cleaned.length >= 2 && cleaned.charAt(2) !== '/') {
+      cleaned = cleaned.substring(0, 2) + '/' + cleaned.substring(2);
+    }
+    if (cleaned.length >= 5 && cleaned.charAt(5) !== '/') {
+      cleaned = cleaned.substring(0, 5) + '/' + cleaned.substring(5);
+    }
+    
+    // Limit to 10 characters (MM/DD/YYYY)
+    if (cleaned.length <= 10) {
+      setEventDate(cleaned);
+      updateEventFormDate(cleaned, eventTime);
+    }
+  };
+
+  const handleTimeChange = (text: string) => {
+    // Remove any non-numeric characters except colons
+    let cleaned = text.replace(/[^\d:]/g, '');
+    
+    // Auto-format as user types (xx:xx)
+    if (cleaned.length >= 2 && cleaned.charAt(2) !== ':') {
+      cleaned = cleaned.substring(0, 2) + ':' + cleaned.substring(2);
+    }
+    
+    // Limit to 5 characters (HH:MM)
+    if (cleaned.length <= 5) {
+      setEventTime(cleaned);
+      updateEventFormDate(eventDate, cleaned);
+    }
+  };
+
+  const updateEventFormDate = (date: string, time: string) => {
+    if (date && time) {
+      setEventForm({...eventForm, date: `${date} at ${time}`});
+    } else if (date) {
+      setEventForm({...eventForm, date: date});
+    } else if (time) {
+      setEventForm({...eventForm, date: time});
+    }
+  };
+
   // Fetch event participants
   const fetchEventParticipants = async (eventId: number) => {
     try {
@@ -763,13 +855,37 @@ function AppContent() {
   };
 
   // Logout function
-  const handleLogout = () => {
-    setIsLoggedIn(false);
-    setToken(null);
-    setUserId(null);
-    setHelloMessage('');
-    setCurrentScreen('map');
-    setActiveTab('maps');
+  const handleLogout = async () => {
+    try {
+      // Call logout API to remove user from online_users table
+      if (userId) {
+        const response = await fetch(`${API_BASE_URL}/api/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ id: userId }),
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+          console.log('Successfully logged out from server');
+        } else {
+          console.log('Logout API call failed:', data.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error calling logout API:', error);
+    } finally {
+      // Always clear local state regardless of API call result
+      setIsLoggedIn(false);
+      setToken(null);
+      setUserId(null);
+      setUsername('');
+      setHelloMessage('');
+      setCurrentScreen('map');
+      setActiveTab('maps');
+    }
   };
 
   // Navigation functions
@@ -929,6 +1045,12 @@ function AppContent() {
                               onPress={() => handleInviteToEvent(event.id)}
                             >
                               <Text style={styles.eventActionButtonText}>👥 Invite</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.eventActionButton, styles.deleteEventButton]}
+                              onPress={() => handleDeleteEvent(event.id, event.title)}
+                            >
+                              <Text style={styles.eventActionButtonText}>🗑️ Delete</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -1350,13 +1472,36 @@ function AppContent() {
               </View>
               
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Date *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter event date"
-                  value={eventForm.date}
-                  onChangeText={(text) => setEventForm({...eventForm, date: text})}
-                />
+                <Text style={styles.inputLabel}>Date & Time *</Text>
+                <View style={styles.dateTimeContainer}>
+                  <View style={styles.dateTimeInputWrapper}>
+                    <Text style={styles.dateTimeInputLabel}>Date (MM/DD/YYYY)</Text>
+                    <TextInput
+                      style={styles.dateTimeInput}
+                      placeholder="MM/DD/YYYY"
+                      value={eventDate}
+                      onChangeText={handleDateChange}
+                      keyboardType="numeric"
+                      maxLength={10}
+                    />
+                  </View>
+                  <View style={styles.dateTimeInputWrapper}>
+                    <Text style={styles.dateTimeInputLabel}>Time (HH:MM)</Text>
+                    <TextInput
+                      style={styles.dateTimeInput}
+                      placeholder="HH:MM"
+                      value={eventTime}
+                      onChangeText={handleTimeChange}
+                      keyboardType="numeric"
+                      maxLength={5}
+                    />
+                  </View>
+                </View>
+                {eventForm.date ? (
+                  <Text style={styles.selectedDateTimeText}>
+                    Selected: {eventForm.date}
+                  </Text>
+                ) : null}
               </View>
               
               <View style={styles.inputContainer}>
@@ -2395,6 +2540,38 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
+  dateTimeContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  dateTimeInputWrapper: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  dateTimeInputLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 5,
+    fontWeight: '500',
+  },
+  dateTimeInput: {
+    backgroundColor: '#f8f8f8',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
+  selectedDateTimeText: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 5,
+  },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2694,6 +2871,9 @@ const styles = StyleSheet.create({
   },
   inviteEventButton: {
     backgroundColor: '#34C759',
+  },
+  deleteEventButton: {
+    backgroundColor: '#FF3B30',
   },
   eventActionButtonText: {
     color: 'white',

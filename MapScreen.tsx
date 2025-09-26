@@ -70,6 +70,10 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
   const [activeMeetup, setActiveMeetup] = useState<any>(null);
   const [joinedMeetups, setJoinedMeetups] = useState<any[]>([]);
   const [activeFilter, setActiveFilter] = useState<'all' | 'friends' | 'meetups'>('all');
+  const [showMeetupDetails, setShowMeetupDetails] = useState(false);
+  const [selectedMeetup, setSelectedMeetup] = useState<any>(null);
+  const [meetupParticipants, setMeetupParticipants] = useState<any[]>([]);
+  const [meetupDetailsLoading, setMeetupDetailsLoading] = useState(false);
   const mapRef = useRef<MapView>(null);
   const watchIdRef = useRef<number | null>(null);
 
@@ -221,17 +225,24 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
 
   const updateLocationOnServer = async (location: Location) => {
     try {
+      const locationData = {
+        ...location,
+        user_id: userId
+      };
+      
       const response = await fetch(`${API_BASE_URL}/api/location/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(location),
+        body: JSON.stringify(locationData),
       });
       
       const data = await response.json();
       if (data.success) {
-        console.log('Location updated on server');
+        console.log('Location updated on server and online_users table:', data.message);
+      } else {
+        console.error('Failed to update location:', data.message);
       }
     } catch (error) {
       console.error('Error updating location on server:', error);
@@ -318,6 +329,27 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
     }
   };
 
+  const fetchMeetupDetails = async (meetupId: number) => {
+    try {
+      setMeetupDetailsLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/meetup/${meetupId}/details`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setSelectedMeetup(data.meetup);
+        setMeetupParticipants(data.participants);
+        setShowMeetupDetails(true);
+      } else {
+        Alert.alert('Error', data.message || 'Failed to load meetup details');
+      }
+    } catch (error) {
+      console.error('Error fetching meetup details:', error);
+      Alert.alert('Error', 'Failed to load meetup details');
+    } finally {
+      setMeetupDetailsLoading(false);
+    }
+  };
+
   const joinMeetup = async (meetupId: number) => {
     // Check if user is already in a meetup
     if (joinedMeetups.length > 0 || activeMeetup) {
@@ -343,6 +375,10 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
         Alert.alert('Success', 'You have joined the meetup!');
         // Refresh joined meetups
         fetchJoinedMeetups();
+        // Refresh meetup details if popup is open
+        if (showMeetupDetails && selectedMeetup?.id === meetupId) {
+          fetchMeetupDetails(meetupId);
+        }
       } else {
         Alert.alert('Error', data.message || 'Failed to join meetup');
       }
@@ -662,18 +698,7 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
             onCalloutPress={() => {
               if (marker.type === 'meetup') {
                 const meetupId = parseInt(marker.id.replace('meetup_', ''));
-                Alert.alert(
-                  'Join Meetup',
-                  `Would you like to join this meetup at ${marker.title}?`,
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { 
-                      text: 'Join', 
-                      onPress: () => joinMeetup(meetupId),
-                      style: 'default'
-                    }
-                  ]
-                );
+                fetchMeetupDetails(meetupId);
               }
             }}
           />
@@ -971,6 +996,79 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Meetup Details Bottom Popup */}
+      {showMeetupDetails && selectedMeetup && (
+        <View style={styles.meetupDetailsPopup}>
+          <View style={styles.meetupDetailsHeader}>
+            <Text style={styles.meetupDetailsTitle}>Meetup Details</Text>
+            <TouchableOpacity 
+              style={styles.closeButton}
+              onPress={() => setShowMeetupDetails(false)}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {meetupDetailsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#007AFF" />
+              <Text style={styles.loadingText}>Loading meetup details...</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.meetupDetailsContent}>
+              <View style={styles.meetupInfoSection}>
+                <Text style={styles.meetupInfoLabel}>Location:</Text>
+                <Text style={styles.meetupInfoValue}>{selectedMeetup.location}</Text>
+              </View>
+              
+              <View style={styles.meetupInfoSection}>
+                <Text style={styles.meetupInfoLabel}>Activities:</Text>
+                <Text style={styles.meetupInfoValue}>{selectedMeetup.activities}</Text>
+              </View>
+              
+              <View style={styles.meetupInfoSection}>
+                <Text style={styles.meetupInfoLabel}>Host:</Text>
+                <Text style={styles.meetupInfoValue}>{selectedMeetup.host_username}</Text>
+              </View>
+              
+              <View style={styles.meetupInfoSection}>
+                <Text style={styles.meetupInfoLabel}>Radius:</Text>
+                <Text style={styles.meetupInfoValue}>{selectedMeetup.meters}m</Text>
+              </View>
+              
+              <View style={styles.participantsSection}>
+                <Text style={styles.participantsTitle}>
+                  Participants ({meetupParticipants.length})
+                </Text>
+                {meetupParticipants.length > 0 ? (
+                  meetupParticipants.map((participant, index) => (
+                    <View key={index} style={styles.participantItem}>
+                      <Text style={styles.participantName}>
+                        {participant.first_name} {participant.last_name} (@{participant.username})
+                      </Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noParticipantsText}>No participants yet</Text>
+                )}
+              </View>
+            </ScrollView>
+          )}
+          
+          <View style={styles.meetupDetailsFooter}>
+            <TouchableOpacity 
+              style={styles.joinMeetupButton}
+              onPress={() => {
+                joinMeetup(selectedMeetup.id);
+                setShowMeetupDetails(false);
+              }}
+            >
+              <Text style={styles.joinMeetupButtonText}>Join Meetup</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1111,6 +1209,110 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     marginTop: 10,
+  },
+  meetupDetailsPopup: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  meetupDetailsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  meetupDetailsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  meetupDetailsContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  meetupInfoSection: {
+    marginVertical: 10,
+  },
+  meetupInfoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 5,
+  },
+  meetupInfoValue: {
+    fontSize: 16,
+    color: '#333',
+  },
+  participantsSection: {
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  participantsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  participantItem: {
+    backgroundColor: '#f8f8f8',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 5,
+  },
+  participantName: {
+    fontSize: 14,
+    color: '#333',
+  },
+  noParticipantsText: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+  meetupDetailsFooter: {
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  joinMeetupButton: {
+    backgroundColor: '#34C759',
+    paddingVertical: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  joinMeetupButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
