@@ -1,0 +1,5 @@
+{"title": "Birthday Dinner", "host": "alice", "date": "2025-10-05", "lat": 40.7128, "lon": -74.0060, "participants": ["alice"]}
+{"title": "Study Session", "host": "bob", "date": "2025-10-06", "lat": 34.0522, "lon": -118.2437, "participants": ["bob"]}
+{"title": "Hiking Trip", "host": "carol", "date": "2025-10-07", "lat": 37.8651, "lon": -119.5383, "participants": ["carol"]}
+{"title": "Coffee Meetup", "host": "dave", "date": "2025-10-08", "lat": 51.5074, "lon": -0.1278, "participants": ["dave"]}
+{"title": "Movie Night", "host": "eve", "date": "2025-10-09", "lat": 48.8566, "lon": 2.3522, "participants": ["eve"]}
