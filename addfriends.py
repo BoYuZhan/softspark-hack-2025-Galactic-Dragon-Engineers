@@ -49,7 +49,7 @@ def manage_friend_requests(file_path, from_id, to_id, action="add"):
             json.dump(r, f)
             f.write("\n")
 
-# Example usage
+
 manage_friend_requests("wanttobefriends.txt", "A1B2C3", "D4E5F6", action="add")
 manage_friend_requests("wanttobefriends.txt", "A1B2C3", "D4E5F6", action="remove")
 
