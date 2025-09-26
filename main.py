@@ -160,3 +160,54 @@ async def get_custom_markers(username: str = "testuser"):
         "markers": markers,
         "count": len(markers)
     }
+
+# Import your functions
+from addfriends import manage_friend_requests
+from remove import remove_friend
+from range import generate_event_invitations
+
+import json
+
+app = FastAPI()
+
+
+class LoginRequest(BaseModel):
+    first_name: str
+    password: str
+
+@app.post("/api/login")
+def login(data: LoginRequest):
+    try:
+        with open("names_and_passwords.txt", "r") as f:
+            for line in f:
+                if line.strip():
+                    user = json.loads(line)
+                    if user["first_name"].lower() == data.first_name.lower() and user["password"] == data.password:
+                        return {"success": True, "message": f"Welcome {user['first_name']}!"}
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="User database not found.")
+
+    raise HTTPException(status_code=401, detail="Invalid name or password.")
+
+
+@app.post("/api/friends/request")
+def add_friend_request(from_id: str, to_id: str):
+    manage_friend_requests("wanttobefriends.txt", from_id, to_id, action="add")
+    return {"success": True, "message": f"Friend request added from {from_id} to {to_id}"}
+
+@app.delete("/api/friends/request")
+def remove_friend_request(from_id: str, to_id: str):
+    manage_friend_requests("wanttobefriends.txt", from_id, to_id, action="remove")
+    return {"success": True, "message": f"Friend request removed from {from_id} to {to_id}"}
+
+
+@app.delete("/api/friends/remove")
+def remove_existing_friend(user_id: str, friend_id: str):
+    remove_friend("friends.txt", user_id, friend_id)
+    return {"success": True, "message": f"Attempted to remove {friend_id} from {user_id}'s friends"}
+
+
+@app.get("/api/events/invitations")
+def get_event_invitations():
+    events = generate_event_invitations("event.txt", "names_and_passwords.txt", "friends.txt")
+    return {"success": True, "events": events}
