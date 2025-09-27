@@ -34,15 +34,15 @@ interface CustomMarker {
   longitude: number;
   title: string;
   description: string;
-  type: 'landmark' | 'user' | 'shared';
+  type: 'landmark' | 'user' | 'shared' | 'meetup';
 }
 
 interface MapScreenProps {
   onBack: () => void;
   username: string;
   userId?: number;
-  activeTab?: 'maps' | 'events' | 'chats' | 'local' | 'friends' | 'profile';
-  onTabPress?: (tab: 'maps' | 'events' | 'chats' | 'local' | 'friends' | 'profile') => void;
+  activeTab?: 'maps' | 'events' | 'health' | 'local' | 'friends' | 'profile' | 'notifications';
+  onTabPress?: (tab: 'maps' | 'events' | 'health' | 'local' | 'friends' | 'profile' | 'notifications') => void;
   safeAreaInsets?: any;
 }
 
@@ -74,6 +74,14 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
   const [selectedMeetup, setSelectedMeetup] = useState<any>(null);
   const [meetupParticipants, setMeetupParticipants] = useState<any[]>([]);
   const [meetupDetailsLoading, setMeetupDetailsLoading] = useState(false);
+  const [invitingToMeetup, setInvitingToMeetup] = useState<any>(null);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [selectedFriends, setSelectedFriends] = useState<any[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [showInviteSearch, setShowInviteSearch] = useState(false);
+  const [friendSearchText, setFriendSearchText] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
   const mapRef = useRef<MapView>(null);
   const watchIdRef = useRef<number | null>(null);
 
@@ -573,8 +581,120 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
     }
   };
 
+  const fetchFriends = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/friends/get?user_id=${userId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        // Remove duplicates based on id
+        const uniqueFriends = data.friends.filter((friend: any, index: number, self: any[]) => 
+          index === self.findIndex(f => f.id === friend.id)
+        );
+        setFriends(uniqueFriends);
+      } else {
+        console.error('Failed to fetch friends:', data.message);
+        setFriends([]);
+      }
+    } catch (error) {
+      console.error('Error fetching friends:', error);
+      setFriends([]);
+    }
+  };
+
   const handleInviteToMeetup = () => {
-    Alert.alert('Invite Friends', 'Invite functionality coming soon!');
+    const meetup = activeMeetup || joinedMeetups[0];
+    if (meetup) {
+      // Only allow hosts to invite friends
+      if (meetup.host !== userId) {
+        Alert.alert('Permission Denied', 'Only the meetup host can invite users.');
+        return;
+      }
+      
+      setInvitingToMeetup(meetup);
+      setSelectedFriends([]);
+      setFriendSearchText('');
+      setSearchResults([]);
+      setShowInviteSearch(true);
+    }
+  };
+
+  const searchUsers = async (query: string) => {
+    if (query.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    try {
+      setSearchLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/users/search?query=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setSearchResults(data.users);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchTextChange = (text: string) => {
+    setFriendSearchText(text);
+    searchUsers(text);
+  };
+
+  const toggleUserSelection = (user: any) => {
+    const isSelected = selectedFriends.some(friend => friend.id === user.id);
+    if (isSelected) {
+      setSelectedFriends(selectedFriends.filter(friend => friend.id !== user.id));
+    } else {
+      setSelectedFriends([...selectedFriends, user]);
+    }
+  };
+
+  const handleSendInvites = async () => {
+    if (selectedFriends.length === 0) {
+      Alert.alert('No Users Selected', 'Please select at least one user to invite.');
+      return;
+    }
+
+    try {
+      setInviteLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/meetup/invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          meetup_id: invitingToMeetup.id,
+          host_id: userId,
+          invited_user_ids: selectedFriends.map(friend => friend.id)
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        Alert.alert('Success', `Successfully invited ${data.invited_count} users to the meetup!`);
+        setShowInviteSearch(false);
+        setSelectedFriends([]);
+        setInvitingToMeetup(null);
+        setFriendSearchText('');
+        setSearchResults([]);
+      } else {
+        Alert.alert('Error', data.message || 'Failed to send invitations');
+      }
+    } catch (error) {
+      console.error('Error sending invites:', error);
+      Alert.alert('Error', 'Failed to send invitations');
+    } finally {
+      setInviteLoading(false);
+    }
   };
 
   const handleEndMeetup = () => {
@@ -742,12 +862,14 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
             >
               <Text style={styles.meetupActionButtonText}>✏️ Edit</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.meetupActionButton, styles.inviteButton]}
-              onPress={handleInviteToMeetup}
-            >
-              <Text style={styles.meetupActionButtonText}>👥 Invite</Text>
-            </TouchableOpacity>
+            {activeMeetup && activeMeetup.host === userId && (
+              <TouchableOpacity
+                style={[styles.meetupActionButton, styles.inviteButton]}
+                onPress={handleInviteToMeetup}
+              >
+                <Text style={styles.meetupActionButtonText}>👥 Invite</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.meetupActionButton, styles.endButton]}
               onPress={handleEndMeetup}
@@ -765,12 +887,6 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
             <Text style={styles.joinedMeetupHost}>Host: {joinedMeetups[0].host_username}</Text>
           </View>
           <View style={styles.joinedMeetupActionButtons}>
-            <TouchableOpacity
-              style={[styles.meetupActionButton, styles.inviteButton]}
-              onPress={() => Alert.alert('Invite', 'Invite functionality coming soon!')}
-            >
-              <Text style={styles.meetupActionButtonText}>👥 Invite</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.meetupActionButton, styles.endButton]}
               onPress={() => leaveMeetup(joinedMeetups[0].id)}
@@ -964,11 +1080,11 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.toolbarButton, activeTab === 'chats' && styles.activeToolbarButton]}
-            onPress={() => onTabPress('chats')}
+            style={[styles.toolbarButton, activeTab === 'health' && styles.activeToolbarButton]}
+            onPress={() => onTabPress('health')}
           >
-            <Text style={[styles.toolbarIcon, activeTab === 'chats' && styles.activeToolbarIcon]}>💬</Text>
-            <Text style={[styles.toolbarLabel, activeTab === 'chats' && styles.activeToolbarLabel]}>Chats</Text>
+            <Text style={[styles.toolbarIcon, activeTab === 'health' && styles.activeToolbarIcon]}>🏥</Text>
+            <Text style={[styles.toolbarLabel, activeTab === 'health' && styles.activeToolbarLabel]}>Health</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -985,6 +1101,14 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
           >
             <Text style={[styles.toolbarIcon, activeTab === 'friends' && styles.activeToolbarIcon]}>👥</Text>
             <Text style={[styles.toolbarLabel, activeTab === 'friends' && styles.activeToolbarLabel]}>Friends</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.toolbarButton, activeTab === 'notifications' && styles.activeToolbarButton]}
+            onPress={() => onTabPress('notifications')}
+          >
+            <Text style={[styles.toolbarIcon, activeTab === 'notifications' && styles.activeToolbarIcon]}>🔔</Text>
+            <Text style={[styles.toolbarLabel, activeTab === 'notifications' && styles.activeToolbarLabel]}>Notifications</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -1043,7 +1167,7 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
                 </Text>
                 {meetupParticipants.length > 0 ? (
                   meetupParticipants.map((participant, index) => (
-                    <View key={index} style={styles.participantItem}>
+                    <View key={`participant-${participant.user_id}`} style={styles.participantItem}>
                       <Text style={styles.participantName}>
                         {participant.first_name} {participant.last_name} (@{participant.username})
                       </Text>
@@ -1053,6 +1177,7 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
                   <Text style={styles.noParticipantsText}>No participants yet</Text>
                 )}
               </View>
+
             </ScrollView>
           )}
           
@@ -1069,6 +1194,116 @@ export default function MapScreen({ onBack, username, userId, activeTab, onTabPr
           </View>
         </View>
       )}
+
+      {/* Invite Users Modal */}
+      <Modal
+        visible={showInviteSearch}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowInviteSearch(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Invite Users to Meetup</Text>
+            
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Search Users</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Search by username, first name, or last name..."
+                value={friendSearchText}
+                onChangeText={handleSearchTextChange}
+                autoFocus
+              />
+            </View>
+
+            {searchLoading && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.loadingText}>Searching...</Text>
+              </View>
+            )}
+
+            {searchResults.length > 0 && (
+              <View style={styles.searchResultsContainer}>
+                <Text style={styles.searchResultsTitle}>Search Results:</Text>
+                <ScrollView style={styles.searchResultsList} nestedScrollEnabled>
+                  {searchResults.map((user) => {
+                    const isSelected = selectedFriends.some(friend => friend.id === user.id);
+                    return (
+                      <TouchableOpacity
+                        key={user.id}
+                        style={[
+                          styles.searchResultItem,
+                          isSelected && styles.selectedSearchResultItem
+                        ]}
+                        onPress={() => toggleUserSelection(user)}
+                      >
+                        <Text style={[
+                          styles.searchResultText,
+                          isSelected && styles.selectedSearchResultText
+                        ]}>
+                          {user.display_name}
+                        </Text>
+                        {isSelected && (
+                          <Text style={styles.checkmark}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
+            {selectedFriends.length > 0 && (
+              <View style={styles.selectedUsersContainer}>
+                <Text style={styles.selectedUsersTitle}>Selected Users ({selectedFriends.length}):</Text>
+                <ScrollView style={styles.selectedUsersList} nestedScrollEnabled>
+                  {selectedFriends.map((user) => (
+                    <View key={user.id} style={styles.selectedUserItem}>
+                      <Text style={styles.selectedUserText}>{user.display_name}</Text>
+                      <TouchableOpacity
+                        style={styles.removeUserButton}
+                        onPress={() => toggleUserSelection(user)}
+                      >
+                        <Text style={styles.removeUserButtonText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowInviteSearch(false);
+                  setSelectedFriends([]);
+                  setFriendSearchText('');
+                  setSearchResults([]);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.modalButton, 
+                  styles.inviteButton,
+                  selectedFriends.length === 0 && styles.disabledButton
+                ]}
+                onPress={handleSendInvites}
+                disabled={inviteLoading || selectedFriends.length === 0}
+              >
+                <Text style={styles.inviteButtonText}>
+                  {inviteLoading ? 'Sending...' : `Send Invites (${selectedFriends.length})`}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1527,6 +1762,11 @@ const styles = StyleSheet.create({
   inviteButton: {
     backgroundColor: '#FF9500',
   },
+  inviteButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   endButton: {
     backgroundColor: '#FF3B30',
   },
@@ -1609,5 +1849,144 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+  },
+  // Invite Modal Styles
+  meetupInfo: {
+    backgroundColor: '#f0f0f0',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  meetupInfoText: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
+  },
+  friendsList: {
+    flex: 1,
+    marginBottom: 16,
+  },
+  friendsListTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  friendsScrollView: {
+    maxHeight: 200,
+  },
+  friendItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  selectedFriendItem: {
+    backgroundColor: '#e3f2fd',
+    borderColor: '#2196f3',
+  },
+  friendName: {
+    fontSize: 16,
+    color: '#333',
+  },
+  selectedFriendName: {
+    color: '#2196f3',
+    fontWeight: '600',
+  },
+  checkmark: {
+    fontSize: 16,
+    color: '#2196f3',
+    fontWeight: 'bold',
+  },
+  disabledButton: {
+    backgroundColor: '#ccc',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  // Invite Search Modal Styles
+  searchResultsContainer: {
+    marginTop: 16,
+    maxHeight: 200,
+  },
+  searchResultsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  searchResultsList: {
+    maxHeight: 150,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  selectedSearchResultItem: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  searchResultText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  selectedSearchResultText: {
+    color: 'white',
+  },
+  checkmark: {
+    fontSize: 16,
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  selectedUsersContainer: {
+    marginTop: 16,
+    maxHeight: 150,
+  },
+  selectedUsersTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  selectedUsersList: {
+    maxHeight: 100,
+  },
+  selectedUserItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 8,
+    backgroundColor: '#e8f4fd',
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  selectedUserText: {
+    fontSize: 14,
+    color: '#007AFF',
+    flex: 1,
+  },
+  removeUserButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  removeUserButtonText: {
+    fontSize: 16,
+    color: '#FF3B30',
+    fontWeight: 'bold',
   },
 });

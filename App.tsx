@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  Image,
 } from 'react-native';
 import {
   SafeAreaProvider,
@@ -50,6 +51,15 @@ interface FriendRequest {
   username: string;
 }
 
+interface Notification {
+  id: number;
+  user_id: number;
+  message: string;
+  timestamp: string;
+  type: string;
+  related_id: number | null;
+}
+
 interface HelloResponse {
   message: string;
 }
@@ -72,7 +82,7 @@ function AppContent() {
   const [helloMessage, setHelloMessage] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<'main' | 'map'>('map');
-  const [activeTab, setActiveTab] = useState<'maps' | 'events' | 'chats' | 'local' | 'friends' | 'profile'>('maps');
+  const [activeTab, setActiveTab] = useState<'maps' | 'events' | 'health' | 'local' | 'friends' | 'profile' | 'notifications'>('maps');
   const [username, setUsername] = useState<string>('testuser');
   const [userId, setUserId] = useState<number | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -118,6 +128,8 @@ function AppContent() {
   const [eventDate, setEventDate] = useState('');
   const [eventTime, setEventTime] = useState('');
   const [friendsTab, setFriendsTab] = useState<'friends' | 'requests' | 'send'>('friends');
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
@@ -416,6 +428,29 @@ function AppContent() {
       setAttendingEvents([]);
     } finally {
       setAttendingEventsLoading(false);
+    }
+  };
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    if (!userId) return;
+    
+    try {
+      setNotificationsLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/notifications/${userId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setNotifications(data.notifications);
+      } else {
+        console.error('Failed to fetch notifications:', data.message);
+        setNotifications([]);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+      setNotifications([]);
+    } finally {
+      setNotificationsLoading(false);
     }
   };
 
@@ -878,13 +913,13 @@ function AppContent() {
       console.error('Error calling logout API:', error);
     } finally {
       // Always clear local state regardless of API call result
-      setIsLoggedIn(false);
-      setToken(null);
+    setIsLoggedIn(false);
+    setToken(null);
       setUserId(null);
       setUsername('');
-      setHelloMessage('');
-      setCurrentScreen('map');
-      setActiveTab('maps');
+    setHelloMessage('');
+    setCurrentScreen('map');
+    setActiveTab('maps');
     }
   };
 
@@ -898,7 +933,7 @@ function AppContent() {
   };
 
   // Tab navigation functions
-  const handleTabPress = (tab: 'maps' | 'events' | 'chats' | 'local' | 'friends' | 'profile') => {
+  const handleTabPress = (tab: 'maps' | 'events' | 'health' | 'local' | 'friends' | 'profile' | 'notifications') => {
     setActiveTab(tab);
     if (tab === 'maps') {
       setCurrentScreen('map');
@@ -922,6 +957,9 @@ function AppContent() {
     } else if (tab === 'profile') {
       setCurrentScreen('main');
       fetchUserProfile(); // Fetch user profile when profile tab is pressed
+    } else if (tab === 'notifications') {
+      setCurrentScreen('main');
+      fetchNotifications(); // Fetch notifications when notifications tab is pressed
     } else {
       setCurrentScreen('main');
     }
@@ -983,7 +1021,7 @@ function AppContent() {
             {/* Event Content */}
             <View style={styles.eventContent}>
               {eventsTab === 'events' && (
-                <View style={styles.card}>
+            <View style={styles.card}>
                   <Text style={styles.cardTitle}>All Events</Text>
                   {allUserGroupEventsLoading ? (
                     <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 20 }} />
@@ -995,13 +1033,13 @@ function AppContent() {
                           <Text style={styles.eventDescription}>{event.description}</Text>
                           <Text style={styles.eventDate}>{event.date}</Text>
                           <Text style={styles.eventLocation}>📍 {event.location}</Text>
-                        </TouchableOpacity>
+              </TouchableOpacity>
                       ))}
                     </ScrollView>
                   ) : (
                     <Text style={styles.infoText}>No events found. Create your first event!</Text>
                   )}
-                </View>
+            </View>
               )}
               
               {eventsTab === 'hosting' && (
@@ -1127,18 +1165,30 @@ function AppContent() {
           </View>
         );
       
-      case 'chats':
+      case 'health':
         return (
           <>
-            <Text style={styles.title}>Chats</Text>
+            <Text style={styles.title}>Health Dashboard</Text>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Recent Conversations</Text>
-              <Text style={styles.infoText}>💬 Community Group - 5 new messages</Text>
-              <Text style={styles.infoText}>👥 Running Club - 2 new messages</Text>
-              <Text style={styles.infoText}>🎯 Event Planning - 1 new message</Text>
-              <TouchableOpacity style={styles.button}>
-                <Text style={styles.buttonText}>Start New Chat</Text>
-              </TouchableOpacity>
+              <Text style={styles.cardTitle}>Health Metrics</Text>
+              <View style={styles.healthContainer}>
+                <View style={styles.healthItem}>
+                  <Text style={styles.healthTitle}>Heart Rate</Text>
+                  <Image source={require('./heart.png')} style={styles.healthImage} />
+                </View>
+                <View style={styles.healthItem}>
+                  <Text style={styles.healthTitle}>Happiness</Text>
+                  <Image source={require('./happy.png')} style={styles.healthImage} />
+                </View>
+                <View style={styles.healthItem}>
+                  <Text style={styles.healthTitle}>Mean Arterial Pressure</Text>
+                  <Image source={require('./map.png')} style={styles.healthImage} />
+                </View>
+                <View style={styles.healthItem}>
+                  <Text style={styles.healthTitle}>Body Temperature</Text>
+                  <Image source={require('./temp.png')} style={styles.healthImage} />
+                </View>
+              </View>
             </View>
           </>
         );
@@ -1147,7 +1197,7 @@ function AppContent() {
         return (
           <View style={styles.localContainer}>
             <View style={styles.localHeader}>
-              <Text style={styles.title}>Local Events</Text>
+            <Text style={styles.title}>Local Events</Text>
               <TouchableOpacity style={styles.refreshButton} onPress={fetchEvents}>
                 <Text style={styles.refreshButtonText}>🔄</Text>
               </TouchableOpacity>
@@ -1177,8 +1227,8 @@ function AppContent() {
                   <Text style={styles.infoText}>No events found. Tap refresh to load events.</Text>
                   <TouchableOpacity style={styles.button} onPress={fetchEvents}>
                     <Text style={styles.buttonText}>Refresh Events</Text>
-                  </TouchableOpacity>
-                </View>
+              </TouchableOpacity>
+            </View>
               )}
             </View>
           </View>
@@ -1236,7 +1286,7 @@ function AppContent() {
                   ) : friends.length > 0 ? (
                     <ScrollView style={styles.friendsList} showsVerticalScrollIndicator={false}>
                       {friends.map((friend, index) => (
-                        <View key={index} style={styles.friendItem}>
+                        <View key={`friend-${friend.id}`} style={styles.friendItem}>
                           <Text style={styles.friendName}>{friend.username}</Text>
                           <TouchableOpacity 
                             style={styles.removeFriendButton}
@@ -1262,7 +1312,7 @@ function AppContent() {
                   ) : friendRequests.length > 0 ? (
                     <ScrollView style={styles.requestsList} showsVerticalScrollIndicator={false}>
                       {friendRequests.map((request, index) => (
-                        <View key={index} style={styles.requestItem}>
+                        <View key={`request-${request.id || index}`} style={styles.requestItem}>
                           <Text style={styles.requestFrom}>From: {request.username}</Text>
                           <View style={styles.requestButtons}>
                             <TouchableOpacity 
@@ -1318,7 +1368,7 @@ function AppContent() {
             <Text style={styles.title}>User Profile</Text>
             
             {userProfile ? (
-              <View style={styles.card}>
+            <View style={styles.card}>
                 <Text style={styles.cardTitle}>Profile Information</Text>
                 <Text style={styles.profileInfo}>Username: {userProfile.username}</Text>
                 <Text style={styles.profileInfo}>First Name: {userProfile.first_name || 'Not set'}</Text>
@@ -1326,7 +1376,7 @@ function AppContent() {
                 <Text style={styles.profileInfo}>Email: {userProfile.email || 'Not set'}</Text>
                 <Text style={styles.profileInfo}>Location: {userProfile.location || 'Not set'}</Text>
                 <Text style={styles.profileInfo}>Bio: {userProfile.bio || 'No bio available'}</Text>
-              </View>
+            </View>
             ) : (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>Loading Profile...</Text>
@@ -1349,6 +1399,50 @@ function AppContent() {
           </>
         );
       
+      case 'notifications':
+        return (
+          <View style={styles.notificationsContainer}>
+            <Text style={styles.title}>Notifications</Text>
+            
+            {notificationsLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Loading notifications...</Text>
+              </View>
+            ) : notifications.length > 0 ? (
+              <ScrollView style={styles.notificationsList}>
+                {notifications.map((notification) => (
+                  <View key={notification.id} style={styles.notificationItem}>
+                    <View style={styles.notificationHeader}>
+                      <Text style={styles.notificationType}>
+                        {notification.type === 'friend_request' && '👥'}
+                        {notification.type === 'friend_accept' && '✅'}
+                        {notification.type === 'meetup_join' && '📍'}
+                        {notification.type === 'meetup_leave' && '🚪'}
+                        {notification.type === 'meetup_invite' && '🎯'}
+                        {notification.type === 'meetup_invite_response' && '📝'}
+                        {notification.type === 'event_invite' && '📅'}
+                        {notification.type === 'event_response' && '📝'}
+                        {' '}
+                        {notification.type.replace('_', ' ').toUpperCase()}
+                      </Text>
+                      <Text style={styles.notificationTime}>
+                        {new Date(notification.timestamp).toLocaleString()}
+                      </Text>
+                    </View>
+                    <Text style={styles.notificationMessage}>{notification.message}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No notifications yet</Text>
+                <Text style={styles.emptySubtext}>You'll see notifications here when friends interact with you</Text>
+              </View>
+            )}
+          </View>
+        );
+      
       default:
         return null;
     }
@@ -1363,7 +1457,7 @@ function AppContent() {
           username={username}
           userId={userId || undefined}
           activeTab={activeTab}
-          onTabPress={handleTabPress}
+          onTabPress={handleTabPress as (tab: 'maps' | 'events' | 'health' | 'local' | 'friends' | 'profile' | 'notifications') => void}
           safeAreaInsets={safeAreaInsets}
         />
       );
@@ -1395,11 +1489,11 @@ function AppContent() {
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.toolbarButton, activeTab === 'chats' && styles.activeToolbarButton]}
-            onPress={() => handleTabPress('chats')}
+            style={[styles.toolbarButton, activeTab === 'health' && styles.activeToolbarButton]}
+            onPress={() => handleTabPress('health')}
           >
-            <Text style={[styles.toolbarIcon, activeTab === 'chats' && styles.activeToolbarIcon]}>💬</Text>
-            <Text style={[styles.toolbarLabel, activeTab === 'chats' && styles.activeToolbarLabel]}>Chats</Text>
+            <Text style={[styles.toolbarIcon, activeTab === 'health' && styles.activeToolbarIcon]}>🏥</Text>
+            <Text style={[styles.toolbarLabel, activeTab === 'health' && styles.activeToolbarLabel]}>Health</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -1416,6 +1510,14 @@ function AppContent() {
           >
             <Text style={[styles.toolbarIcon, activeTab === 'friends' && styles.activeToolbarIcon]}>👥</Text>
             <Text style={[styles.toolbarLabel, activeTab === 'friends' && styles.activeToolbarLabel]}>Friends</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.toolbarButton, activeTab === 'notifications' && styles.activeToolbarButton]}
+            onPress={() => handleTabPress('notifications')}
+          >
+            <Text style={[styles.toolbarIcon, activeTab === 'notifications' && styles.activeToolbarIcon]}>🔔</Text>
+            <Text style={[styles.toolbarLabel, activeTab === 'notifications' && styles.activeToolbarLabel]}>Notifications</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -1532,7 +1634,7 @@ function AppContent() {
                           )
                           .map((friend, index) => (
                             <TouchableOpacity
-                              key={index}
+                              key={`dropdown-friend-${friend.id}`}
                               style={styles.friendDropdownItem}
                               onPress={() => {
                                 setEventForm({...eventForm, selectedFriends: [...eventForm.selectedFriends, friend]});
@@ -1560,7 +1662,7 @@ function AppContent() {
                   <View style={styles.selectedFriendsContainer}>
                     <Text style={styles.selectedFriendsLabel}>Selected Friends:</Text>
                     {eventForm.selectedFriends.map((friend, index) => (
-                      <View key={index} style={styles.selectedFriendChip}>
+                      <View key={`selected-friend-${friend.id}`} style={styles.selectedFriendChip}>
                         <Text style={styles.selectedFriendText}>{friend.username}</Text>
                         <TouchableOpacity
                           onPress={() => {
@@ -1687,7 +1789,7 @@ function AppContent() {
                 <ScrollView style={styles.friendSelectionList} showsVerticalScrollIndicator={false}>
                   {friends.map((friend, index) => (
                     <TouchableOpacity
-                      key={index}
+                      key={`event-friend-${friend.id}`}
                       style={styles.friendSelectionItem}
                       onPress={() => inviteUserToEvent(friend.id)}
                     >
@@ -2996,6 +3098,109 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     padding: 20,
+  },
+  // Notifications Styles
+  notificationsContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  notificationsList: {
+    flex: 1,
+  },
+  notificationItem: {
+    backgroundColor: 'white',
+    padding: 16,
+    marginBottom: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  notificationType: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
+  },
+  notificationTime: {
+    fontSize: 12,
+    color: '#666',
+  },
+  notificationMessage: {
+    fontSize: 16,
+    color: '#333',
+    lineHeight: 22,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  // Health Styles
+  healthContainer: {
+    marginTop: 16,
+  },
+  healthItem: {
+    width: '100%',
+    backgroundColor: '#f8f9fa',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  healthTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  healthImage: {
+    width: 200,
+    height: 150,
+    resizeMode: 'contain',
   },
 });
 
