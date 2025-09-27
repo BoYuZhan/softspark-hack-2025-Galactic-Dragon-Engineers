@@ -31,6 +31,61 @@ This idea of lack of social connection has been tackled by Colourful Living with
 
 Colourful Living encourages users to be active, always looking out for nearby friends and events. The meetup feature encourages meaningful interaction, where friends are more likely to interact with others in their daily life. The event planner also allows for easier interactions with no stress of planning, just the event date and time and if the users are coming or not.
 
+## Technical Features & Implementation
+
+### **Frontend (React Native)**
+- **Cross-platform mobile app** built with React Native 0.81.4 and TypeScript
+- **Real-time location tracking** using `@react-native-community/geolocation` with configurable intervals
+- **Interactive maps** powered by `react-native-maps` with custom markers for users, meetups, and shared locations
+- **Tab-based navigation** with 7 main sections: Maps, Events, Health, Local, Friends, Profile, Notifications
+- **Modal-based UI** for meetup creation, user search, and profile editing
+- **Responsive design** with dark/light mode support and safe area handling
+
+### **Backend (FastAPI)**
+- **RESTful API** built with FastAPI and Pydantic for data validation
+- **SQLite database** with 10+ tables for users, events, meetups, friends, and notifications
+- **Real-time location services** with server-side location tracking and sharing
+- **Host-only invitation system** with user search and multi-select functionality
+- **Static file serving** for health chart images and assets
+- **Comprehensive API endpoints** for authentication, social features, and data management
+
+### **Health Analytics (Data Science)**
+- **Machine learning pipeline** using Pandas, NumPy, Matplotlib, Seaborn, and Scikit-learn
+- **Time series analysis** for heart rate and happiness tracking over time
+- **Statistical visualizations** including density plots for MAP and body temperature
+- **Linear regression model** for happiness prediction based on health metrics
+- **Automated chart generation** with PNG export for mobile display
+- **Health metrics tracking**: Heart Rate, Blood Pressure, MAP, Body Temperature, Body Humidity, Happiness Index
+
+### **Real-time Features**
+- **Continuous GPS tracking** with configurable update intervals (1 second to 1 minute)
+- **Live location sharing** between friends with map animations
+- **Real-time notifications** for meetup invitations, friend requests, and event updates
+- **Server synchronization** for location data and social interactions
+- **Map animations** for smooth user experience during location updates
+
+### **Social Features**
+- **Friend system** with request/accept workflow and search functionality
+- **Location-based meetups** with GPS coordinates and configurable radius
+- **Event management** with host controls and participant tracking
+- **Invitation system** with host-only permissions and user search
+- **Social graph** tracking relationships and interactions
+
+### **Database Architecture**
+- **SQLite database** with ACID compliance and foreign key constraints
+- **Optimized schema** with proper indexing for performance
+- **10+ tables** including users, events, meetups, friends, notifications, and location tracking
+- **Automated initialization** with sample data and repopulation scripts
+- **Migration support** for schema updates and data management
+
+### **Development & Deployment**
+- **Cross-platform support** for iOS and Android with shared codebase
+- **Modern development tools** including ESLint, Prettier, Jest, and Babel
+- **TypeScript integration** for type safety and better development experience
+- **Database management** with initialization scripts and sample data
+- **Comprehensive documentation** with setup instructions and troubleshooting
+
+
 ## Prerequisites
 
 Before running the application, ensure you have the following installed:
