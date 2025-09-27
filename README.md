@@ -4,6 +4,8 @@ A React Native mobile application with FastAPI backend for social meetups, event
 
 ## Youtube link: 
 
+## Demo Link: https://youtu.be/uhuhyviUhBM
+
 ## What is the problem
 
 Tired of constantly being aired when making plans? Sick of how long it takes everyone to respond? Want to join others in activities but don't know their schedule of the top of your head? Then Colourful living has the solution.
@@ -25,7 +27,9 @@ This idea of lack of social connection has been tackled by Colourful Living with
 - 📍 **Location sharing** - Share your location with friends
 - 🎯 **Host-only invitations** - Meetup hosts can invite specific users
 
+## How it solves the problem?
 
+Colourful Living encourages users to be active, always looking out for nearby friends and events. The meetup feature encourages meaningful interaction, where friends are more likely to interact with others in their daily life. The event planner also allows for easier interactions with no stress of planning, just the event date and time and if the users are coming or not.
 
 ## Prerequisites
 
