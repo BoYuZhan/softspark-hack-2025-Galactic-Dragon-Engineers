@@ -18,6 +18,7 @@ import sqlite3
 import os
 from datetime import datetime
 from meetup import *
+from notifications import *
 # Database file path
 DB_FILE = 'main.db'
 
@@ -232,6 +233,8 @@ def main():
         create_friend_requests_table(conn)
         create_meetup_table(conn)
         create_meetup_join_table(conn)
+        create_meetup_invites_table(conn)
+        create_notifications_table(conn)
         
         # Create indexes
         print("\n🔍 Creating database indexes...")
