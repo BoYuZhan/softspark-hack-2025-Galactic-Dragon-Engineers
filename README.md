@@ -89,7 +89,30 @@ Colourful Living encourages users to be active, always looking out for nearby fr
 - **User chats for each event to organise details**
 - **AI chatbot to be implemented to allow for users to think creatively**
 - **Predictive ML model**
-- 
+
+## Scope and Market:
+
+Putting Colourful Living in context with what’s out there:
+The mental health / wellness app market is large and growing fast. In 2024‑2025 estimates, market size for wellness & mental health apps is between US$5‑7+ billion, with projections to reach USD 17‑20+ billion by 2030‑2035, at CAGRs in the mid‑teens (∼14‑18 %) depending on region. Grand View Research+2Business Research Insights+2
+
+
+The mental health wearables market is also expanding quickly: in 2023 it was around USD 1.5 billion, with projections toward roughly USD 6 billion by 2032. Dataintelo
+
+
+Competitors / similar offerings:
+
+
+Meetup: connects people around events/interests, but does not integrate wellness measurement or wearables; does not measure real‑time happiness or suggest which events are better for your wellbeing. Meetup also has published trend reports (e.g. “State of Friendships”) confirming that meeting around shared interest gives meaningful social connections. Meetup
+
+
+Wellness & meditation apps (Calm, Headspace, others): strong in mood, stress, mindfulness. Many have large userbases (50+ million users, large revenue), but limited social discovery & no real location‑based friendship building + limited artistic event integration. Business of Apps+2Business of Apps+2
+
+
+Wearable tech: companies like Bellabeat, Oura, Muse, WHOOP etc track physiological metrics (sleep, HRV, stress) and sometimes provide alerts / feedback. But they rarely connect to social features (who to hang with, which artistic events you might enjoy) or directly tie metrics to social/creative satisfaction. Bellabeat for example tracks stress resistance, activity, sleep etc, with mindfulness guidance. Thinker+3Wikipedia+3LinkedIn+3
+
+
+Some usage statistics: in a survey across U.S., China, and Singapore, many people already use health wearables (Apple Watch, Fitbit etc) and health/wellness apps; the combination of apps + wearables seems more effective for mental & physical wellbeing than either alone. PMC
+
 
 ## Prerequisites
 
