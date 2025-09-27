@@ -2,6 +2,19 @@
 
 A React Native mobile application with FastAPI backend for social meetups, events, health tracking, and friend management.
 
+##Youtube link: 
+
+##What is the problem
+
+Tired of constantly being aired when making plans? Sick of how long it takes everyone to respond? Want to join others in activities but don't know their schedule of the top of your head? Then Colourful living has the solution.
+
+In this day and age, more and more individuals are stuck on their phones, and not living in the moment. More young individuals are lonlier than ever:
+- About 1 in 4 Australians will experience loneliness or isolation at some point. 
+- Among younger people (18-24) a high percentage report feeling lonely
+- Research shows that over time, the number of close friends Australians report has declined compared to decades past. Also, people are less likely to know their neighbours well enough to drop in uninvited
+
+This idea of lack of social connection has been tackled by Colourful Living with the new application.
+
 ## Features
 
 - 🗺️ **Location-based meetups** - Create and join meetups near you
@@ -11,6 +24,8 @@ A React Native mobile application with FastAPI backend for social meetups, event
 - 🔔 **Notifications** - Real-time notifications for invitations and updates
 - 📍 **Location sharing** - Share your location with friends
 - 🎯 **Host-only invitations** - Meetup hosts can invite specific users
+
+
 
 ## Prerequisites
 
