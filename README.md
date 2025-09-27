@@ -85,6 +85,11 @@ Colourful Living encourages users to be active, always looking out for nearby fr
 - **Database management** with initialization scripts and sample data
 - **Comprehensive documentation** with setup instructions and troubleshooting
 
+## Future Expansions
+- **User chats for each event to organise details**
+- **AI chatbot to be implemented to allow for users to think creatively**
+- **Predictive ML model**
+- 
 
 ## Prerequisites
 
