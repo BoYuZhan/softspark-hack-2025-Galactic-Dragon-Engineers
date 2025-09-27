@@ -4,14 +4,21 @@ from typing import List, Optional
 import uuid
 import sqlite3
 from datetime import datetime
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 from eventapi import get_events
-from messages import save_message
-from returnmessages import handle_massages
+#from messages import save_message
+#from returnmessages import handle_massages
 from user_events import *
 from users import *
 from addfriends import *
 from meetup import *
+from notifications import *
 app = FastAPI()
+
+# Mount static files for pictures
+app.mount("/pictures", StaticFiles(directory="pictures"), name="pictures")
 
 # In-memory storage for demo purposes
 # In production, use a proper database
@@ -163,11 +170,11 @@ async def signup(data: SignupRequest):
         
         if user_id:
             return {
-                "success": True,
-                "message": "Account created successfully!",
-                "user_id": user_id,
-                "username": data.username
-            }
+                "success": True, 
+                        "message": "Account created successfully!",
+                        "user_id": user_id,
+                        "username": data.username
+                    }
         else:
             return {
                 "success": False,
@@ -184,10 +191,11 @@ async def signup(data: SignupRequest):
 @app.post("/api/location/update")
 async def update_location(location_data: LocationUpdateRequest):
     """Update user's current location in both user_locations and online_users tables"""
+    
     try:
         location_id = str(uuid.uuid4())
         timestamp = datetime.now().isoformat()
-        
+    
         # Get username from user_id for backward compatibility with user_locations
         user = get_user_by_id(location_data.user_id)
         if not user:
@@ -201,13 +209,13 @@ async def update_location(location_data: LocationUpdateRequest):
         # Update user_locations dictionary (for backward compatibility)
         user_locations[username] = {
             "id": location_id,
-            "latitude": location_data.latitude,
-            "longitude": location_data.longitude,
+                "latitude": location_data.latitude,
+                "longitude": location_data.longitude,
             "timestamp": timestamp,
-            "description": location_data.description or "Current location"
-        }
-        
-        # Update online_users table with new location
+                "description": location_data.description or "Current location"
+            }
+            
+            # Update online_users table with new location
         success = add_online_user(
             location_data.user_id, 
             location_data.description or "Current location",
@@ -219,21 +227,21 @@ async def update_location(location_data: LocationUpdateRequest):
             return {
                 "success": True,
                 "location_id": location_id,
-                "message": f"Location updated for {username}",
-                "user_id": location_data.user_id
-            }
+                        "message": f"Location updated for {username}",
+                        "user_id": location_data.user_id
+                    }
         else:
             return {
                 "success": False,
                 "message": "Failed to update location in database"
             }
-            
+                    
     except Exception as e:
         print(f"Error updating location: {e}")
         return {
             "success": False,
             "message": f"Failed to update location: {str(e)}"
-        }
+    }
 
 @app.get("/api/location/current")
 async def get_current_location(username: str = "testuser"):
@@ -313,8 +321,8 @@ async def get_friends_markers(user_id: int = 1):
                     "longitude": online_data[0][5],  # longitude
                     "title": friend_data[1],  # username
                     "description": f"{friend_data[1]} is online",
-        "type": "user"
-    })
+            "type": "user"
+        })
     
     return {
         "success": True,
@@ -556,6 +564,12 @@ async def invite_user_to_event_endpoint(invite_data: InviteUserRequest):
         success = invite_user_to_event(invite_data.event_id, invite_data.user_id)
         
         if success:
+            # Send notification to the invited user
+            event_host = get_event_host(invite_data.event_id)
+            host_username = get_username_by_id(event_host) if event_host else "Unknown Host"
+            notification_message = f"{host_username} invited you to an event"
+            add_notification(invite_data.user_id, notification_message, "event_invite", invite_data.event_id)
+            
             return {
                 "success": True,
                 "message": "User invited to event successfully"
@@ -648,6 +662,26 @@ async def respond_to_invitation_endpoint(response_data: RespondToInvitationReque
     try:
         respond_to_event_invitation(response_data.participant_id, response_data.response)
         
+        # Get participant info to send notification to host
+        conn = sqlite3.connect('main.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT user_id, event_id FROM event_participants WHERE id = ?
+        ''', (response_data.participant_id,))
+        participant_info = cursor.fetchone()
+        conn.close()
+        
+        if participant_info:
+            user_id, event_id = participant_info
+            event_host = get_event_host(event_id)
+            responder_username = get_username_by_id(user_id)
+            response_text = "accepted" if response_data.response == 1 else "rejected"
+            
+            # Send notification to the event host
+            if event_host and event_host != user_id:
+                notification_message = f"{responder_username} {response_text} your event invitation"
+                add_notification(event_host, notification_message, "event_response", event_id)
+        
         response_text = "accepted" if response_data.response == 1 else "rejected"
         return {
             "success": True,
@@ -660,6 +694,38 @@ async def respond_to_invitation_endpoint(response_data: RespondToInvitationReque
             "message": f"Failed to respond to invitation: {str(e)}"
         }
 
+# Notification endpoints
+@app.get("/api/notifications/{user_id}")
+async def get_user_notifications_endpoint(user_id: int):
+    """Get all notifications for a user"""
+    try:
+        notifications = get_user_notifications(user_id)
+        
+        notifications_data = []
+        for notification in notifications:
+            notifications_data.append({
+                "id": notification[0],
+                "user_id": notification[1],
+                "message": notification[2],
+                "timestamp": notification[3],
+                "type": notification[4],
+                "related_id": notification[5]
+            })
+        
+        return {
+            "success": True,
+            "notifications": notifications_data,
+            "count": len(notifications_data)
+        }
+    except Exception as e:
+        print(f"Error fetching notifications: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to fetch notifications: {str(e)}",
+            "notifications": [],
+            "count": 0
+        }
+
 # Friends endpoints
 @app.get("/api/friends/get")
 async def get_user_friends(user_id: int = 1):
@@ -667,12 +733,17 @@ async def get_user_friends(user_id: int = 1):
     try:
         friends = get_friends(user_id)
         friends_data = []
+        seen_ids = set()
         for friend in friends:
-            friend_user = get_user_by_id(friend[0])
-            friends_data.append({
-                "id": friend_user[0],
-                "username": friend_user[1]
-            })
+            friend_id = friend[0]
+            if friend_id not in seen_ids and friend_id != user_id:  # Avoid duplicates and self
+                friend_user = get_user_by_id(friend_id)
+                if friend_user:
+                    friends_data.append({
+                        "id": friend_user[0],
+                        "username": friend_user[1]
+                    })
+                    seen_ids.add(friend_id)
         print(friends_data)
         return {
             "success": True,
@@ -740,6 +811,12 @@ async def send_friend_request(request_data: FriendRequestModel):
         print(f"Found user {request_data.to_username} with ID {to_user_id}")
         
         add_friend_request(request_data.from_id, to_user_id)
+        
+        # Send notification to the recipient
+        from_username = get_username_by_id(request_data.from_id)
+        notification_message = f"{from_username} sent you a friend request"
+        add_notification(to_user_id, notification_message, "friend_request", request_data.from_id)
+        
         print(f"Friend request sent from user {request_data.from_id} to user {to_user_id}")
         return {
             "success": True,
@@ -761,6 +838,12 @@ async def accept_friend_request(action_data: FriendActionModel):
         friend_id = action_data.friend_id
         print(f"Accepting friend request from {user_id} to {friend_id}")
         add_friend(user_id, friend_id)
+        
+        # Send notification to the person who sent the friend request
+        accepter_username = get_username_by_id(user_id)
+        notification_message = f"{accepter_username} accepted your friend request"
+        add_notification(friend_id, notification_message, "friend_accept", user_id)
+        
         print(f"Friend request accepted: {action_data.user_id} and {action_data.friend_id} are now friends")
         return {
             "success": True,
@@ -1005,8 +1088,17 @@ async def get_meetup_details(meetup_id: int):
                 "message": "Meetup not found"
             }
         
+        # Ensure meetup is a tuple/list with expected length
+        if not isinstance(meetup, (tuple, list)) or len(meetup) < 7:
+            print(f"Invalid meetup data: {meetup}, type: {type(meetup)}")
+            return {
+                "success": False,
+                "message": "Invalid meetup data"
+            }
+        
         # Get host username
-        host_user = get_user_by_id(meetup[6])  # meetup[6] is the host user_id
+        host_user_id = meetup[6]  # meetup[6] is the host user_id
+        host_user = get_user_by_id(host_user_id)
         host_username = host_user[1] if host_user else "Unknown"
         
         # Get participants
@@ -1014,14 +1106,16 @@ async def get_meetup_details(meetup_id: int):
         participant_details = []
         
         for participant in participants:
-            user = get_user_by_id(participant[0])  # participant[0] is user_id
-            if user:
-                participant_details.append({
-                    "user_id": participant[0],
-                    "username": user[1],
-                    "first_name": user[3],
-                    "last_name": user[4]
-                })
+            # Ensure participant is a tuple/list with expected length
+            if isinstance(participant, (tuple, list)) and len(participant) > 0:
+                user = get_user_by_id(participant[0])  # participant[0] is user_id
+                if user and isinstance(user, (tuple, list)) and len(user) > 4:
+                    participant_details.append({
+                        "user_id": participant[0],
+                        "username": user[1],
+                        "first_name": user[3],
+                        "last_name": user[4]
+                    })
         
         return {
             "success": True,
@@ -1041,6 +1135,8 @@ async def get_meetup_details(meetup_id: int):
         
     except Exception as e:
         print(f"Error getting meetup details: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "success": False,
             "message": f"Failed to get meetup details: {str(e)}"
@@ -1056,6 +1152,22 @@ async def join_meetup(join_data: JoinMeetupModel):
     try:
         # Add user to meetup using the existing function
         add_meetup_join(join_data.meetup_id, join_data.user_id)
+        
+        # Send notifications to other users in the meetup
+        joiner_username = get_username_by_id(join_data.user_id)
+        meetup_host = get_meetup_host(join_data.meetup_id)
+        existing_users = get_users_in_meetup(join_data.meetup_id)
+        
+        # Notify the host (if not the joiner)
+        if meetup_host and meetup_host != join_data.user_id:
+            notification_message = f"{joiner_username} joined your meetup"
+            add_notification(meetup_host, notification_message, "meetup_join", join_data.meetup_id)
+        
+        # Notify other participants
+        for user_id in existing_users:
+            if user_id != join_data.user_id and user_id != meetup_host:
+                notification_message = f"{joiner_username} joined the meetup"
+                add_notification(user_id, notification_message, "meetup_join", join_data.meetup_id)
         
         print(f"User {join_data.user_id} joined meetup {join_data.meetup_id}")
         return {
@@ -1109,6 +1221,22 @@ async def leave_meetup(join_data: JoinMeetupModel):
         # Remove user from meetup using the existing function
         remove_meetup_join(join_data.meetup_id, join_data.user_id)
         
+        # Send notifications to other users in the meetup
+        leaver_username = get_username_by_id(join_data.user_id)
+        meetup_host = get_meetup_host(join_data.meetup_id)
+        remaining_users = get_users_in_meetup(join_data.meetup_id)
+        
+        # Notify the host (if not the leaver)
+        if meetup_host and meetup_host != join_data.user_id:
+            notification_message = f"{leaver_username} left your meetup"
+            add_notification(meetup_host, notification_message, "meetup_leave", join_data.meetup_id)
+        
+        # Notify other participants
+        for user_id in remaining_users:
+            if user_id != join_data.user_id and user_id != meetup_host:
+                notification_message = f"{leaver_username} left the meetup"
+                add_notification(user_id, notification_message, "meetup_leave", join_data.meetup_id)
+        
         print(f"User {join_data.user_id} left meetup {join_data.meetup_id}")
         return {
             "success": True,
@@ -1119,6 +1247,141 @@ async def leave_meetup(join_data: JoinMeetupModel):
         return {
             "success": False,
             "message": f"Failed to leave meetup: {str(e)}"
+        }
+
+class MeetupInviteRequest(BaseModel):
+    meetup_id: int
+    host_id: int
+    invited_user_ids: List[int]
+
+class MeetupInviteResponse(BaseModel):
+    invite_id: int
+    response: int  # 1 = accept, 2 = decline
+
+# Meetup invite endpoints
+@app.post("/api/meetup/invite")
+async def invite_users_to_meetup(invite_request: MeetupInviteRequest):
+    """Invite multiple users to a meetup"""
+    try:
+        # Verify that the host_id matches the actual meetup host
+        meetup = get_meetup_by_id(invite_request.meetup_id)
+        if not meetup:
+            return {
+                "success": False,
+                "message": "Meetup not found"
+            }
+        
+        if meetup[6] != invite_request.host_id:  # meetup[6] is the host field
+            return {
+                "success": False,
+                "message": "Only the meetup host can invite friends"
+            }
+        
+        invited_count = 0
+        failed_invites = []
+        
+        for user_id in invite_request.invited_user_ids:
+            success = invite_user_to_meetup(invite_request.meetup_id, invite_request.host_id, user_id)
+            if success:
+                # Send notification to invited user
+                host_username = get_username_by_id(invite_request.host_id)
+                notification_message = f"{host_username} invited you to a meetup"
+                add_notification(user_id, notification_message, "meetup_invite", invite_request.meetup_id)
+                invited_count += 1
+            else:
+                failed_invites.append(user_id)
+        
+        return {
+            "success": True,
+            "message": f"Successfully invited {invited_count} users",
+            "invited_count": invited_count,
+            "failed_invites": failed_invites
+        }
+    except Exception as e:
+        print(f"Error inviting users to meetup: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to invite users: {str(e)}"
+        }
+
+@app.get("/api/meetup/invites/{user_id}")
+async def get_meetup_invites_endpoint(user_id: int):
+    """Get all meetup invitations for a user"""
+    try:
+        invites = get_meetup_invites_for_user(user_id)
+        
+        invites_data = []
+        for invite in invites:
+            invites_data.append({
+                "invite_id": invite[0],
+                "meetup_id": invite[1],
+                "host_id": invite[2],
+                "invited_user_id": invite[3],
+                "timestamp": invite[4],
+                "status": invite[5],
+                "location": invite[6],
+                "activities": invite[7],
+                "latitude": invite[8],
+                "longitude": invite[9],
+                "host_username": invite[10]
+            })
+        
+        return {
+            "success": True,
+            "invites": invites_data,
+            "count": len(invites_data)
+        }
+    except Exception as e:
+        print(f"Error fetching meetup invites: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to fetch meetup invites: {str(e)}",
+            "invites": [],
+            "count": 0
+        }
+
+@app.post("/api/meetup/invite/respond")
+async def respond_to_meetup_invite_endpoint(response_data: MeetupInviteResponse):
+    """Respond to a meetup invitation"""
+    try:
+        success = respond_to_meetup_invite(response_data.invite_id, response_data.response)
+        
+        if success:
+            # Get invite details for notification
+            conn = sqlite3.connect('main.db')
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT mi.host_id, mi.invited_user_id, mi.meetup_id 
+                FROM meetup_invites mi WHERE mi.id = ?
+            ''', (response_data.invite_id,))
+            invite_info = cursor.fetchone()
+            conn.close()
+            
+            if invite_info:
+                host_id, invited_user_id, meetup_id = invite_info
+                responder_username = get_username_by_id(invited_user_id)
+                response_text = "accepted" if response_data.response == 1 else "declined"
+                
+                # Send notification to host
+                if host_id != invited_user_id:
+                    notification_message = f"{responder_username} {response_text} your meetup invitation"
+                    add_notification(host_id, notification_message, "meetup_invite_response", meetup_id)
+            
+            response_text = "accepted" if response_data.response == 1 else "declined"
+            return {
+                "success": True,
+                "message": f"Meetup invitation {response_text} successfully"
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to respond to meetup invitation"
+            }
+    except Exception as e:
+        print(f"Error responding to meetup invitation: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to respond to invitation: {str(e)}"
         }
 
 # User profile endpoints
@@ -1201,4 +1464,127 @@ async def list_whats_on():
             "success": False,
             "message": f"Failed to fetch events: {str(e)}",
             "events": []
+    }
+
+# Health endpoints
+@app.get("/api/health/metrics")
+async def get_health_metrics():
+    """Get health metrics data"""
+    try:
+        # Read statistics from CSV file
+        import pandas as pd
+        df = pd.read_csv('statistics.csv')
+        
+        # Get the latest health metrics
+        latest_data = df.iloc[-1]
+        
+        health_metrics = {
+            "heart_rate": int(latest_data['HeartRate']),
+            "bp_sys": int(latest_data['BP_sys']),
+            "bp_dia": int(latest_data['BP_dia']),
+            "map": float(latest_data['MAP']),
+            "body_humidity": float(latest_data['Body Humidity']),
+            "body_temperature": float(latest_data['Body Temperature']),
+            "happiness": float(latest_data['Happiness(%)']),
+            "timestamp": latest_data['Time']
+        }
+        
+        return {
+            "success": True,
+            "metrics": health_metrics
+        }
+    except Exception as e:
+        print(f"Error fetching health metrics: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to fetch health metrics: {str(e)}"
+        }
+
+@app.get("/api/health/pictures")
+async def get_health_pictures():
+    """Get list of health pictures with their names"""
+    try:
+        pictures_dir = "pictures"
+        if not os.path.exists(pictures_dir):
+            return {
+                "success": False,
+                "message": "Pictures directory not found"
+            }
+        
+        picture_files = [f for f in os.listdir(pictures_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
+        
+        # Map picture names to their descriptions
+        picture_mapping = {
+            "heart.png": "Heart Rate",
+            "happy.png": "Happiness",
+            "map.png": "Mean Arterial Pressure",
+            "temp.png": "Body Temperature"
+        }
+        
+        pictures = []
+        for picture_file in picture_files:
+            if picture_file in picture_mapping:
+                pictures.append({
+                    "filename": picture_file,
+                    "name": picture_mapping[picture_file],
+                    "url": f"/pictures/{picture_file}"
+                })
+        
+        return {
+            "success": True,
+            "pictures": pictures
+        }
+    except Exception as e:
+        print(f"Error fetching health pictures: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to fetch health pictures: {str(e)}"
+        }
+
+# User search endpoint for meetup invitations
+@app.get("/api/users/search")
+async def search_users(query: str = "", limit: int = 20):
+    """Search for users by username for meetup invitations"""
+    try:
+        if not query or len(query) < 2:
+            return {
+                "success": True,
+                "users": [],
+                "count": 0
+            }
+        
+        # Search users by username
+        conn = sqlite3.connect('main.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, username, first_name, last_name 
+            FROM users 
+            WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
+            LIMIT ?
+        ''', (f'%{query}%', f'%{query}%', f'%{query}%', limit))
+        users = cursor.fetchall()
+        conn.close()
+        
+        users_data = []
+        for user in users:
+            users_data.append({
+                "id": user[0],
+                "username": user[1],
+                "first_name": user[2],
+                "last_name": user[3],
+                "display_name": f"{user[2]} {user[3]} (@{user[1]})"
+            })
+        
+        return {
+            "success": True,
+            "users": users_data,
+            "count": len(users_data)
+        }
+    except Exception as e:
+        print(f"Error searching users: {e}")
+        return {
+            "success": False,
+            "message": f"Failed to search users: {str(e)}",
+            "users": [],
+            "count": 0
         }

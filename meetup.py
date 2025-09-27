@@ -35,6 +35,26 @@ def create_meetup_join_table(conn):
     conn.commit()
     conn.close()
 
+def create_meetup_invites_table(conn):
+    file_path = 'main.db'
+    conn = sqlite3.connect(file_path)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS meetup_invites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            meetup_id INTEGER NOT NULL,
+            host_id INTEGER NOT NULL,
+            invited_user_id INTEGER NOT NULL,
+            timestamp TEXT,
+            status INTEGER DEFAULT 0,
+            FOREIGN KEY (meetup_id) REFERENCES meetups (id),
+            FOREIGN KEY (host_id) REFERENCES users (id),
+            FOREIGN KEY (invited_user_id) REFERENCES users (id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
 def create_meetup(location, activities, meters, latitude, longitude, host):
     file_path = 'main.db'
     conn = sqlite3.connect(file_path)
@@ -143,3 +163,88 @@ def get_user_joined_meetups(user_id):
     meetups = cursor.fetchall()
     conn.close()
     return meetups
+
+def invite_user_to_meetup(meetup_id, host_id, invited_user_id):
+    """Invite a user to a meetup"""
+    file_path = 'main.db'
+    conn = sqlite3.connect(file_path)
+    cursor = conn.cursor()
+    try:
+        # Check if invitation already exists
+        cursor.execute('''
+            SELECT id FROM meetup_invites 
+            WHERE meetup_id = ? AND invited_user_id = ?
+        ''', (meetup_id, invited_user_id))
+        existing = cursor.fetchone()
+        
+        if existing:
+            conn.close()
+            return False  # Invitation already exists
+        
+        # Create invitation
+        from datetime import datetime
+        timestamp = datetime.now().isoformat()
+        
+        cursor.execute('''
+            INSERT INTO meetup_invites (meetup_id, host_id, invited_user_id, timestamp)
+            VALUES (?, ?, ?, ?)
+        ''', (meetup_id, host_id, invited_user_id, timestamp))
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"Error inviting user to meetup: {e}")
+        return False
+
+def get_meetup_invites_for_user(user_id):
+    """Get all meetup invitations for a user"""
+    file_path = 'main.db'
+    conn = sqlite3.connect(file_path)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT mi.*, m.location, m.activities, m.latitude, m.longitude, u.username as host_username
+        FROM meetup_invites mi
+        JOIN meetups m ON mi.meetup_id = m.id
+        JOIN users u ON mi.host_id = u.id
+        WHERE mi.invited_user_id = ? AND mi.status = 0
+        ORDER BY mi.timestamp DESC
+    ''', (user_id,))
+    invites = cursor.fetchall()
+    conn.close()
+    return invites
+
+def respond_to_meetup_invite(invite_id, response):
+    """Respond to a meetup invitation (1 = accept, 2 = decline)"""
+    file_path = 'main.db'
+    conn = sqlite3.connect(file_path)
+    cursor = conn.cursor()
+    try:
+        # Update invitation status
+        cursor.execute('''
+            UPDATE meetup_invites SET status = ? WHERE id = ?
+        ''', (response, invite_id))
+        
+        # If accepted, add user to meetup
+        if response == 1:
+            cursor.execute('''
+                SELECT meetup_id, invited_user_id FROM meetup_invites WHERE id = ?
+            ''', (invite_id,))
+            result = cursor.fetchone()
+            if result:
+                meetup_id, user_id = result
+                cursor.execute('''
+                    INSERT INTO meetup_joins (meetup_id, user_id)
+                    VALUES (?, ?)
+                ''', (meetup_id, user_id))
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        print(f"Error responding to meetup invite: {e}")
+        return False
