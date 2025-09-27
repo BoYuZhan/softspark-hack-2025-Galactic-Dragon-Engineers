@@ -2,9 +2,9 @@
 
 A React Native mobile application with FastAPI backend for social meetups, events, health tracking, and friend management.
 
-## Youtube link: 
+## Youtube link: https://youtu.be/ZQe_AnefvAE
 
-## Demo Link: https://youtu.be/uhuhyviUhBM
+## Demo Link (just the demo for running the app): https://youtu.be/uhuhyviUhBM
 
 ## What is the problem
 
