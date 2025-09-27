@@ -5,6 +5,8 @@ import uuid
 import sqlite3
 from datetime import datetime
 from eventapi import get_events
+from messages import save_message
+from returnmessages import handle_massages
 from user_events import *
 from users import *
 from addfriends import *
@@ -49,6 +51,11 @@ class ShareLocationRequest(BaseModel):
     longitude: float
     description: Optional[str] = None
     share_with: List[str] = []  # List of usernames to share with
+
+class MessageRequest(BaseModel):
+    user_id: str
+    message: str
+    timestamp: Optional[str] = None
 
 class LocationResponse(BaseModel):
     id: str
@@ -96,6 +103,16 @@ class FriendActionModel(BaseModel):
 
 class UserIdModel(BaseModel):
     id: int
+
+@app.post("/api/message")
+async def post_message(user_id: str, message: str):
+    entry = handle_message(user_id, message)
+    return {"success": True, "entry": entry}
+
+@app.post("/api/messages/send")
+def send_message(data: MessageRequest):
+    entry = save_message("messages.txt", data.user_id, data.message, data.timestamp)
+    return {"success": True, "message": entry}
 
 @app.post("/api/login")
 async def login(data: LoginRequest):
