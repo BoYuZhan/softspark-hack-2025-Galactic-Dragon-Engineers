@@ -2,9 +2,9 @@
 
 A React Native mobile application with FastAPI backend for social meetups, events, health tracking, and friend management.
 
-##Youtube link: 
+## Youtube link: 
 
-##What is the problem
+## What is the problem
 
 Tired of constantly being aired when making plans? Sick of how long it takes everyone to respond? Want to join others in activities but don't know their schedule of the top of your head? Then Colourful living has the solution.
 
